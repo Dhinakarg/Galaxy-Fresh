@@ -1,0 +1,75 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Reads the current user's role from the /users collection.
+    // NOTE: This incurs one extra read per rule evaluation — acceptable for RBAC.
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isManager() {
+      return isAuthenticated() && userRole() == 'manager';
+    }
+
+    function isSupervisorOrAbove() {
+      return isAuthenticated() && userRole() in ['manager', 'supervisor'];
+    }
+
+    function isChefOrAbove() {
+      return isAuthenticated() && userRole() in ['manager', 'supervisor', 'chef'];
+    }
+
+    // ─── /users collection ───────────────────────────────────────────────────
+
+    match /users/{userId} {
+      // Any authenticated user can read profiles (needed for ManagePermissions page)
+      allow read: if isAuthenticated();
+
+      // Users can only create their own profile document (on signup)
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+
+      // Only managers can promote/demote roles
+      allow update: if isManager();
+
+      // No one deletes user profiles through the client
+      allow delete: if false;
+    }
+
+    // ─── /ingredients collection ─────────────────────────────────────────────
+
+    match /ingredients/{docId} {
+      // 1. All authenticated users can read the shared inventory
+      allow read: if isAuthenticated();
+
+      // 2. Managers and Supervisors can CREATE new ingredients
+      allow create: if isSupervisorOrAbove();
+
+      // 3. Only Managers can DELETE records
+      allow delete: if isManager();
+
+      // 4. Update access defined by role:
+      // - Manager & Supervisor: Full update access
+      // - Chef: Can only update stock levels (quantity and batches)
+      allow update: if isSupervisorOrAbove() 
+                    || (isChefOrAbove()
+                        && request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasOnly(['quantity', 'batches']));
+
+      // 5. Activity Logs sub-collection (Audit Trail)
+      match /activityLogs/{logId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+      }
+    }
+
+  }
+}

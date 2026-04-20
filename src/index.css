@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/* 
+ * Galaxy Fresh: Unified Design System
+ * -----------------------------------
+ * This CSS architecture manages the transition between 'Cloud' (Light) and 'Midnight' (Dark) themes.
+ * It combines the performance of native CSS variables with the utility-first power of Tailwind 4.
+ */
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Force Tailwind 4 to use the '.dark' descriptor instead of OS media queries */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --border-color: #f3f4f6;
+  --card-bg: #ffffff;
+  
+  /* Primary Action Colors */
+  --color-indigo-600: #4f46e5;
+}
+
+.dark {
+  --bg-primary: #09090b;
+  --bg-secondary: #121214;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --border-color: #27272a;
+  --card-bg: #18181b;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  /* Use a smooth transition for the core layout background */
+  transition: background-color 400ms cubic-bezier(0.4, 0, 0.2, 1), color 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 
+ * Global Semantic Overrides
+ * Ensures components respond to the 'dark' Class-Proxy
+ */
+.dark body {
+  background-color: var(--bg-primary);
+}
+
+/* Custom Multi-Theme Utilities */
+.theme-card {
+  background-color: var(--card-bg);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--border-color);
+  transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-text {
+  color: var(--text-primary);
+}
+
+.theme-text-muted {
+  color: var(--text-secondary);
+}
