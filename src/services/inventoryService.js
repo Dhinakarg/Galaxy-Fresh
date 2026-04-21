@@ -7,21 +7,34 @@ import { db } from './firebase';
  * This prevents common Firestore "invalid data" crashes.
  */
 const prepareDataForStorage = (data) => {
-  const clean = { ...data };
+  if (data === null || data === undefined) return undefined;
   
-  if (clean.purchaseDate instanceof Date) clean.purchaseDate = Timestamp.fromDate(clean.purchaseDate);
-  if (clean.expiryDate instanceof Date) clean.expiryDate = Timestamp.fromDate(clean.expiryDate);
+  // If it's already a Firestore Timestamp or a number/string/boolean, return as is
+  if (data instanceof Timestamp || typeof data !== 'object') return data;
   
-  if (Array.isArray(clean.batches)) {
-    clean.batches = clean.batches.map(batch => ({
-      ...batch,
-      purchaseDate: batch.purchaseDate instanceof Date ? Timestamp.fromDate(batch.purchaseDate) : batch.purchaseDate,
-      expiryDate: batch.expiryDate instanceof Date ? Timestamp.fromDate(batch.expiryDate) : batch.expiryDate,
-    }));
+  // Convert standard JS Dates to Firestore Timestamps
+  if (data instanceof Date) return Timestamp.fromDate(data);
+  
+  // Handle Arrays (specifically the batches array)
+  if (Array.isArray(data)) {
+    return data
+      .map(item => prepareDataForStorage(item))
+      .filter(v => v !== undefined);
   }
-
-  // Remove undefined fields which Firestore doesn't like
-  return Object.fromEntries(Object.entries(clean).filter(([, v]) => v !== undefined));
+  
+  // Handle Plain Objects
+  // Using a more inclusive check for plain objects
+  const clean = {};
+  let hasProperties = false;
+  
+  for (const [key, value] of Object.entries(data)) {
+    const cleanedValue = prepareDataForStorage(value);
+    if (cleanedValue !== undefined) {
+      clean[key] = cleanedValue;
+      hasProperties = true;
+    }
+  }
+  return hasProperties ? clean : undefined;
 };
 
 const COLLECTION = 'ingredients';

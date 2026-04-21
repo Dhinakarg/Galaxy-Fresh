@@ -3,7 +3,7 @@ import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { provisionUser } from '../services/authService';
-import { ALL_ROLES, ROLE_LABELS, ROLE_COLORS, ROLE_DESCRIPTIONS } from '../utils/permissions';
+import { ALL_ROLES, ROLE_LABELS, ROLE_COLORS, ROLE_DESCRIPTIONS, getPermissions } from '../utils/permissions';
 import { useToast } from '../hooks/useToast.jsx';
 
 /**
@@ -13,7 +13,8 @@ import { useToast } from '../hooks/useToast.jsx';
  * Fully optimized for Light and Dark themes.
  */
 export default function ManagePermissions() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const perms = getPermissions(role);
   const { showToast, ToastComponent } = useToast();
   
   const [users,   setUsers]   = useState([]);
@@ -23,11 +24,43 @@ export default function ManagePermissions() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMember, setNewMember] = useState({ email: '', password: '', role: 'chef' });
   const [isProvisioning, setIsProvisioning] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+
+  if (!perms.canManageUsers) return (
+     <div className="p-12 text-center text-red-500 font-bold">
+       Access Denied: You do not have administrative privileges to manage team credentials.
+     </div>
+  );
 
   useEffect(() => {
+    if (!user) return;
+
+    setLoading(true);
+    const usersRef = collection(db, 'users');
+
+    // 1. Initial Fetch (Fast Path)
+    let hasFirstSnapshot = false;
+    const fetchInitial = async () => {
+      try {
+        const { getDocs } = await import('firebase/firestore');
+        const snap = await getDocs(usersRef);
+        if (!hasFirstSnapshot) {
+          const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setUsers(list.sort((a, b) => (a.email || '').localeCompare(b.email || '')));
+        }
+      } catch (err) {
+        console.error('[ManagePermissions] Initial load failed:', err);
+      } finally {
+        if (!hasFirstSnapshot) setLoading(false);
+      }
+    };
+    fetchInitial();
+
+    // 2. Real-time Subscription (Background Path)
     const unsubscribe = onSnapshot(
-      collection(db, 'users'),
+      usersRef,
       (snapshot) => {
+        hasFirstSnapshot = true;
         const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
         list.sort((a, b) => {
           if (a.uid === user?.uid) return -1;
@@ -38,8 +71,8 @@ export default function ManagePermissions() {
         setLoading(false);
       },
       (err) => {
-        console.error('Permission Sync Error:', err);
-        setLoading(false);
+        console.error('[ManagePermissions] Real-time Sync Error:', err);
+        if (!hasFirstSnapshot) setLoading(false);
       }
     );
     return () => unsubscribe();
@@ -187,7 +220,28 @@ export default function ManagePermissions() {
               
               <div>
                 <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5">Starting Credentials</label>
-                <input required type="password" minLength={6} value={newMember.password} onChange={e => setNewMember({...newMember, password: e.target.value})} className="w-full border border-gray-100 dark:border-zinc-700 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-zinc-800 dark:text-white font-mono transition-colors" placeholder="Temporary Secret" />
+                <div className="relative">
+                  <input 
+                    required 
+                    type={showPass ? 'text' : 'password'} 
+                    minLength={6} 
+                    value={newMember.password} 
+                    onChange={e => setNewMember({...newMember, password: e.target.value})} 
+                    className="w-full border border-gray-100 dark:border-zinc-700 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-zinc-800 dark:text-white font-bold text-sm transition-colors" 
+                    placeholder="Temporary Secret" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPass(!showPass)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-indigo-600 transition-colors"
+                  >
+                    {showPass ? (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div>

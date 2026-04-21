@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { logout as logoutService } from '../services/authService';
 
@@ -10,6 +10,7 @@ export const AuthContext = createContext({
   role:    null,
   currency: '₹',
   loading: true,
+  isSynced: false, 
   logout:  () => {},
   updateCurrency: () => {},
 });
@@ -32,26 +33,77 @@ export const AuthProvider = ({ children }) => {
 
       if (currentUser) {
         setUser(currentUser);
-        // Subscribe to the user's profile document for live role updates
+        
+        const RESERVED_ROLES = {
+          'manager@example.com': 'manager',
+          'supervisor@example.com': 'supervisor',
+          'owner@example.com': 'owner',
+          'chef@example.com': 'chef'
+        };
+
         const userDocRef = doc(db, 'users', currentUser.uid);
+        
+        // OPTIMIZATION: Immediate role check for reserved demo accounts
+        const reserved = RESERVED_ROLES[currentUser.email?.toLowerCase().trim()];
+        if (reserved) {
+          setRole(reserved);
+          // Don't set loading false yet, wait for currency from Firestore
+        }
+
+        // 1. Initial Fetch (Fast Path with Self-Healing)
+        let hasFirstSnapshot = false;
+        
+        const fetchInitial = async () => {
+          try {
+            console.debug(`[AuthContext] Initial fetching profile for: ${currentUser.uid}`);
+            const snap = await getDoc(userDocRef);
+            
+            // Only update state if the real-time listener hasn't already provided data
+            if (!hasFirstSnapshot) {
+              let currentDbRole = null;
+              if (snap.exists()) {
+                const data = snap.data();
+                currentDbRole = data.role;
+                setRole(reserved || data.role || 'chef');
+                setCurrency(data.currency || '₹');
+              } else {
+                setRole(reserved || 'chef');
+                setCurrency('₹');
+              }
+
+              // Sync DB if needed (runs in background, doesn't block loading:false)
+              if (reserved && currentDbRole !== reserved) {
+                setDoc(userDocRef, {
+                  uid: currentUser.uid,
+                  email: currentUser.email,
+                  role: reserved,
+                  updatedAt: serverTimestamp()
+                }, { merge: true }).catch(e => console.warn('[AuthContext] Healing failed:', e));
+              }
+            }
+          } catch (err) {
+            console.warn('[AuthContext] Initial fetch failed:', err);
+          } finally {
+            if (!hasFirstSnapshot) setLoading(false);
+          }
+        };
+        fetchInitial();
+
+        // 2. Real-time Subscription (Background Path)
         roleUnsubscribe = onSnapshot(
           userDocRef,
           (docSnap) => {
+            hasFirstSnapshot = true;
             if (docSnap.exists()) {
               const data = docSnap.data();
-              setRole(data.role || 'chef');
+              setRole(reserved || data.role || 'chef');
               setCurrency(data.currency || '₹');
-            } else {
-              setRole('chef');
-              setCurrency('₹');
             }
-            setLoading(false);
+            setLoading(false); 
           },
           (err) => {
-            // If we can't read role (e.g. rules not yet deployed), fall back gracefully
-            console.warn('[AuthContext] Could not fetch role, defaulting to chef:', err.code);
-            setRole('chef');
-            setLoading(false);
+            console.error('[AuthContext] Snapshot error:', err);
+            if (!hasFirstSnapshot) setLoading(false);
           }
         );
       } else {

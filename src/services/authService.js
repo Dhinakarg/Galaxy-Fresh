@@ -16,12 +16,21 @@ export const signupWithEmail = async (email, password) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Provision user profile with default role
+    // Provision user profile with correct role (handling reserved demo emails)
+    const RESERVED_ROLES = {
+      'manager@example.com': 'manager',
+      'supervisor@example.com': 'supervisor',
+      'owner@example.com': 'owner',
+      'chef@example.com': 'chef'
+    };
+    const assignedRole = RESERVED_ROLES[email.toLowerCase().trim()] || 'chef';
+
     await setDoc(doc(db, 'users', user.uid), {
       uid:       user.uid,
       email:     user.email,
-      role:      'chef', // default — managers can promote later
+      role:      assignedRole,
       createdAt: serverTimestamp(),
+      currency:  '₹', // default currency
     });
 
     return user;

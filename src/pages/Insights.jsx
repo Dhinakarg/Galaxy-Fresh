@@ -23,6 +23,7 @@ export default function Insights() {
   
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(true);
+  const [indexError, setIndexError] = useState(false);
 
   useEffect(() => {
     async function fetchAuditData() {
@@ -31,12 +32,21 @@ export default function Insights() {
         const snap = await getDocs(q);
         const data = snap.docs.map(doc => {
             const pathSegments = doc.ref.path.split('/');
+            // Standard path: ingredients/{id}/activityLogs/{logId}
+            // If the path starts with '/', pathSegments[0] is empty. Handle both.
+            const pathOffset = doc.ref.path.startsWith('/') ? 1 : 0;
             const ingredientId = pathSegments[pathSegments.length - 3];
             return { ...doc.data(), id: doc.id, ingredientId };
         });
         setLogs(data);
+        setIndexError(false);
       } catch (err) {
-        console.warn('Analytics Indexing Check:', err.code);
+        if (err.code === 'failed-precondition') {
+          console.error('[Analytics] This query requires a collectionGroup index. Create it in Firebase Console -> Firestore -> Indexes.');
+          setIndexError(true);
+        } else {
+          console.warn('Analytics Sync Failure:', err.code, err.message);
+        }
       } finally {
         setLogsLoading(false);
       }
@@ -87,6 +97,31 @@ export default function Insights() {
     });
     return Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
   }, [ingredients]);
+
+  if (indexError) {
+    return (
+      <div className="p-12 text-center max-w-2xl mx-auto min-h-[60vh] flex flex-col items-center justify-center">
+        <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/20 rounded-full flex items-center justify-center mb-6">
+          <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+        </div>
+        <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight mb-4">Analytics Indexing Required</h2>
+        <p className="text-gray-500 dark:text-zinc-400 font-medium mb-8">
+          The "Consumption Ratio" analysis requires a <strong>Collection Group Index</strong> in your Firebase Console to aggregate data across all ingredients.
+        </p>
+        <div className="bg-gray-50 dark:bg-zinc-800 p-6 rounded-2xl text-left w-full border border-gray-100 dark:border-zinc-700">
+          <p className="text-[10px] font-black uppercase text-gray-400 mb-3 tracking-widest">Protocol to resolve:</p>
+          <ol className="text-xs text-gray-600 dark:text-zinc-300 space-y-2 list-decimal pl-4 font-bold">
+            <li>Go to <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">Firebase Console</a></li>
+            <li>Firestore Database &gt; Indexes &gt; Composite</li>
+            <li>Click "Add Index"</li>
+            <li>Collection ID: <code className="bg-white dark:bg-zinc-900 px-1 rounded">activityLogs</code></li>
+            <li>Field 1: <code className="bg-white dark:bg-zinc-900 px-1 rounded">timestamp</code> (Descending)</li>
+            <li>Index Scope: <code className="bg-white dark:bg-zinc-900 px-1 rounded">Collection Group</code></li>
+          </ol>
+        </div>
+      </div>
+    );
+  }
 
   if (invLoading || logsLoading) {
     return (

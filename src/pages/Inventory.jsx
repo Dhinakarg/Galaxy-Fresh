@@ -268,6 +268,16 @@ export default function Inventory() {
                   <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5">Invoice / Ref #</label>
                   <input required={!editingId} type="text" value={formData.invoiceId} onChange={e => setFormData({...formData, invoiceId: e.target.value})} className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-zinc-800 dark:text-white transition-colors" placeholder="INV-001" />
                 </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5">Purchase Date</label>
+                  <input type="date" value={formData.purchaseDate} onChange={e => setFormData({...formData, purchaseDate: e.target.value})} className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-zinc-800 dark:text-white transition-colors" />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5">Expiry Date</label>
+                  <input type="date" value={formData.expiryDate} onChange={e => setFormData({...formData, expiryDate: e.target.value})} className="w-full border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-zinc-800 dark:text-white transition-colors" />
+                </div>
               </div>
 
               <div className="pt-10 flex justify-end space-x-3">

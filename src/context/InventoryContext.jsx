@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useState, useEffect } from 'react';
-import { collection, query, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../hooks/useAuth';
 
@@ -25,29 +25,44 @@ export const InventoryProvider = ({ children }) => {
 
     setLoading(true);
 
-    /**
-     * Multi-tenant: All authenticated users in the organisation share
-     * the same ingredients pool. The `userId` field on each document
-     * now records who *created* it (audit trail) rather than restricting access.
-     *
-     * Previously: where('userId', '==', user.uid)  ← single-user
-     * Now:        no filter                          ← org-wide shared data
-     */
     const ingredientsRef = collection(db, 'ingredients');
-    const q = query(ingredientsRef); // shared across all org members
+    const q = query(ingredientsRef);
 
+    // 1. Initial Fetch (Fast Path)
+    let hasFirstSnapshot = false;
+
+    const fetchInitial = async () => {
+      try {
+        console.debug('[InventoryContext] Fast-path fetching ingredients...');
+        const snapshot = await getDocs(q);
+        
+        if (!hasFirstSnapshot) {
+          const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setIngredients(list);
+        }
+      } catch (err) {
+        console.error('[InventoryContext] Initial load failed:', err);
+        setError(err.message);
+      } finally {
+        if (!hasFirstSnapshot) setLoading(false);
+      }
+    };
+    fetchInitial();
+
+    // 2. Real-time Subscription (Background Path)
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
+        hasFirstSnapshot = true;
         const list = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         setIngredients(list);
         setLoading(false);
         setError(null);
       },
       (err) => {
-        console.error('[InventoryContext] Firestore error:', err);
+        console.error('[InventoryContext] Snapshot error:', err);
         setError(err.message);
-        setLoading(false);
+        if (!hasFirstSnapshot) setLoading(false);
       }
     );
 
