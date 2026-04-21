@@ -1,0 +1,1 @@
+import{b as e,m as t}from"./index.esm-1XuW1Uh_.js";export{t as getDocs,e as updateDoc};
